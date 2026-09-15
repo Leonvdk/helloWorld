@@ -1,0 +1,15 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run the test suite
+        run: make test
+      - name: Print the dial table
+        run: make table

@@ -1,0 +1,9 @@
+build/
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+credentials.ini
+*.o
+*.elf
+*.bin
