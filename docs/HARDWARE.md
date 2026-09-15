@@ -73,10 +73,11 @@ current is the thing that decides how long the clock runs.
 
 | Pack | Fresh | Flat | Verdict |
 |---|---|---|---|
-| **1S LiPo / 18650** | 4.2 V | 3.0 V | The default. Connects straight to a battery-input board, handles the WiFi current pulses, and the shipped thresholds are already set for it. |
+| **1S LiPo / 18650 / 14500** | 4.2 V | 3.0 V | The default. Connects straight to a battery-input board, handles the WiFi current pulses, and the shipped thresholds are already set for it. See "Buying a battery" below. |
 | **3x AA NiMH** | ~4.0 V | ~3.0 V | The good AA answer. 3.6 V nominal sits right in the ESP32's band, so it needs **no converter at all** — same wiring as a LiPo, just different thresholds. Rechargeable, and low internal resistance handles the current pulses. |
 | **4x AA NiMH** | ~5.3 V | ~4.0 V | Best servo performance, since the servo gets its rated 4.8 V. Needs a low-quiescent 3.3 V regulator for the ESP32; the servo runs straight off the pack. |
 | 2x AA alkaline | 3.1 V | 2.0 V | **Avoid.** See below. |
+| USB power bank | 5 V | - | **Avoid.** Shuts itself off when the clock sleeps. See "Not a USB power bank". |
 | 2x AA lithium primary | 3.6 V | 2.0 V | Workable with a low-Iq boost. Much lower internal resistance than alkaline and a flatter discharge, but the boost's idle current still applies. |
 | 3x AA alkaline | 4.5 V | 3.0 V | Works via a low-quiescent LDO or buck. Alkaline sags under the WiFi pulses as it depletes, so NiMH is the better cell. |
 | 9 V PP3 block | 9 V | 6 V | **Worst of the lot.** Least energy of anything here and the most conversion needed. See below. |
@@ -160,21 +161,75 @@ Two rules whatever you use:
 
 ## Power budget
 
-Roughly, for a 2000 mAh cell and the shipped 30-minute update interval:
+Roughly, at the shipped 30-minute update interval:
 
-| State | Current | Time per day |
-|---|---|---|
-| Deep sleep | ~20 uA (a good board) | ~23.9 h |
-| WiFi + fetch | ~120 mA | ~4 min (48 wakes x ~5 s) |
-| Servo moving | ~300 mA average | well under a minute |
+| State | Current | Time per day | Per day |
+|---|---|---|---|
+| Deep sleep | ~80–100 uA (a battery-oriented board) | ~23.9 h | ~2.4 mAh |
+| WiFi + fetch | ~120 mA | ~4 min (48 wakes x ~5 s) | ~8 mAh |
+| Servo moving | ~300 mA average | seconds | <1 mAh |
 
-That comes to about 9 mAh a day, so a couple of months per charge. The
-things that actually decide it are the board's sleep current and how often
-the needle is allowed to move — which is what the deadband in
-`NeedlePolicy` is for.
+Call it **11 mAh a day**, so roughly three months on a 1000 mAh cell and six
+on a 2000 mAh one.
 
-Stretch `normalSleepSeconds` to an hour and it roughly doubles. Wind
-forecasts are hourly anyway, so half-hourly updates are already generous.
+The 80–100 uA figure is what a board designed for battery use actually
+achieves — the ESP32 die itself sleeps at about 10 uA, and the rest is the
+board's regulator and USB-serial chip. A generic DevKitC with an AMS1117
+regulator sleeps at around 5 mA, which is 120 mAh a day and will flatten
+any of these packs inside a week. This single number matters more than
+everything else on this page.
+
+The other lever is how often the needle moves, which is what the deadband
+in `NeedlePolicy` is for. Stretching `normalSleepSeconds` to an hour
+roughly halves the WiFi share; wind forecasts are hourly anyway, so
+half-hourly updates are already generous.
+
+## Buying a battery
+
+What this design wants is a **1S lithium cell, 500 mAh or more**, charged
+over USB-C. Two ways to get the USB-C part:
+
+### The port on the board (recommended)
+
+Pick an ESP32 board that has USB-C and a LiPo charger on it — an Adafruit
+ESP32 Feather V2, a FireBeetle 2 ESP32-E or similar — and pair it with a
+bare pouch cell on a JST-PH 2.0 lead. One cable then flashes the firmware
+*and* charges the clock, with nothing to unplug.
+
+A **2000 mAh 103450 pouch measures about 50 x 34 x 10 mm**, which is very
+nearly the same volume as two AA cells side by side, and it is flat and
+thin rather than cylindrical — the closest thing to "flexible" that is
+worth buying. A 1000 mAh cell is half the thickness and still lasts a
+season. Buy one with protection circuitry already fitted; the reputable
+hobby suppliers all do this.
+
+### The port on the cell
+
+A **14500 lithium cell is literally AA-sized** (14 x 50 mm) and several
+makers now build a USB-C socket and a protection circuit into the cell
+itself — Acebeam, Lumintop and OrcaTorch all sell them at 900–1000 mAh.
+Drop one into a single AA holder and wire the holder to the battery input.
+The trade is that you charge the cell, not the clock, so it has to come out
+unless you can reach the port.
+
+Either way the cell sits at 4.2 V full and 3.0 V empty, which is exactly
+what the shipped `kPower` thresholds expect. No changes needed.
+
+### Not a USB power bank
+
+This is the one to avoid. Power banks watch their output current and shut
+down after 30 seconds or so if nothing is drawing — and a clock asleep at
+100 uA looks exactly like nothing. You would have to waste current on
+purpose to keep the bank awake, which defeats the entire design. It is a
+well-known problem with ESP32 projects and there is no clean fix.
+
+### A note on the servo
+
+A 1S cell gives the servo 3.0–4.2 V, and an SG90 is specified for 4.8–6 V.
+A light needle will still move, but slowly and weakly. If you want it
+crisp, put a small 5 V boost module **after** the load switch rather than
+before it: the boost is then unpowered during deep sleep, so its quiescent
+current only flows for the second or so the needle is actually moving.
 
 ## Calibration
 
