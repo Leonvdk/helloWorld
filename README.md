@@ -97,9 +97,9 @@ Two other build targets:
   a loop, with no WiFi and no sleep. Use it to fit the needle before wiring
   anything else.
 
-**[docs/SETUP.md](docs/SETUP.md) is the step-by-step build guide**: parts,
-toolchain, bench test, pin assignments, the servo power switch and the
-battery divider, then flashing and troubleshooting.
+**[docs/SETUP.md](docs/SETUP.md) is the step-by-step build guide.** It
+leads with the mains-powered build — three wires and a USB-C charger — and
+keeps the battery wiring as an appendix.
 
 ## Design notes
 

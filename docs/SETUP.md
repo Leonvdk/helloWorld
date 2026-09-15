@@ -1,10 +1,10 @@
 # Building and flashing the wind clock
 
-Start to finish: toolchain, a bench test with nothing but a servo, then the
-real wiring. Each stage works on its own, so if something goes wrong you
-know which stage broke it.
+The mains-powered build, start to finish. It needs three wires, a USB-C
+charger and no other electronics.
 
-Read [HARDWARE.md](HARDWARE.md) first if you haven't picked a servo yet.
+Running it on a battery instead? Everything up to step 5 is the same — then
+see [Appendix A](#appendix-a-running-it-on-a-battery).
 
 ---
 
@@ -14,21 +14,18 @@ Read [HARDWARE.md](HARDWARE.md) first if you haven't picked a servo yet.
 
 | | |
 |---|---|
-| ESP32 dev board | Any ESP32 with a USB port. For battery life pick a low-sleep-current board — FireBeetle ESP32, TinyPICO, LOLIN32 Lite. A plain DevKitC works for the bench test but will flatten a battery in days. |
-| Servo | Standard 180°, e.g. SG90 or MG90S. A 270° servo is more forgiving — see HARDWARE.md. |
-| Battery | 1S LiPo 2000 mAh+, ideally with a JST-PH connector matching your board's battery input. **3× AA NiMH works just as well and needs no converter** — see "Powering it" in HARDWARE.md before you buy, and note 2× AA is a poor fit. |
-| P-channel MOSFET | AO3401 or similar, for the servo power switch. |
-| N-channel MOSFETs ×2 | 2N7002 or BSS138, to drive the P-FET gate and to gate the divider. |
-| Resistors | 2× 100 kΩ (divider), 2× 100 kΩ (gate pulls), 1× 1 kΩ. |
-| Capacitors | 470 µF electrolytic, 100 nF ceramic. |
+| ESP32 dev board | Any ESP32 with a USB port. On mains you don't need a low-sleep-current board, so a plain DevKitC is fine here. |
+| Servo | Standard 180°, e.g. SG90 or MG90S. A 270° servo is more forgiving — see [HARDWARE.md](HARDWARE.md). |
+| USB-C charger | **1 A or more.** The servo move and the WiFi transmit burst overlap badly on a 500 mA supply. |
+| USB cable | Must carry data, not just power. This wastes more afternoons than any other item on this list. |
+| 3 jumper wires | Female-to-male, to reach the servo's plug. |
+| 470 µF electrolytic capacitor | Optional but recommended — steadies the 5 V rail when the servo starts moving. |
 | Clock face and needle | Marked 0–100, with 0 at 9 o'clock and 100 at 3 o'clock. |
 
 **Software**
 
-- [PlatformIO](https://platformio.org) — either the VS Code extension or the
-  CLI (`pip install platformio`).
-- A USB cable that carries data, not just power. This wastes more afternoons
-  than any other item on this list.
+- [PlatformIO](https://platformio.org) — the VS Code extension, or the CLI
+  (`pip install platformio`).
 
 **A 2.4 GHz WiFi network.** The ESP32 has no 5 GHz radio. If your router
 publishes one SSID for both bands you may need to split them or use a guest
@@ -45,9 +42,9 @@ git checkout claude/wind-clock-esp32-servo-bt61lc
 make test
 ```
 
-You should see `120 passed, 0 failed`. This needs no hardware and no
-PlatformIO — it's a good check that your toolchain is sane before you
-involve a microcontroller.
+You should see `122 passed, 0 failed`. This needs no hardware and no
+PlatformIO — it's a good check that your toolchain is sane before a
+microcontroller is involved.
 
 Then print the dial you're about to build:
 
@@ -60,21 +57,27 @@ step 4.
 
 ---
 
-## 3. Bench test: servo only
+## 3. Wire it
 
-Don't wire the battery, the MOSFETs or the divider yet. Just this:
+That's the whole thing:
 
-| Servo wire | Goes to |
-|---|---|
-| Signal (orange/white) | **GPIO 18** |
-| V+ (red) | **5V** / **VUSB** pin on the board |
-| GND (brown/black) | **GND** |
+| Servo wire | Colour | Goes to |
+|---|---|---|
+| Signal | orange or white | **GPIO 18** |
+| V+ | red | **5V** (sometimes labelled VUSB or VIN) |
+| GND | brown or black | **GND** |
 
-Powering the servo from the board's 5V pin is fine *for the bench test* on
-USB. Never do it from the 3.3V regulator — a moving servo will brown out
+If you're fitting the capacitor, put it across the servo's V+ and GND as
+close to the servo as you can. Mind the polarity — the stripe is negative.
+
+**Never run the servo from the 3.3 V pin.** A moving servo will brown out
 the board.
 
-Flash the bench firmware:
+---
+
+## 4. Bench test and fit the needle
+
+Plug the board into your computer and flash the sweep:
 
 ```sh
 pio run -e bench -t upload
@@ -84,8 +87,8 @@ pio device monitor
 If upload fails with "failed to connect", hold the **BOOT** button while it
 says *Connecting...*, then release. Some boards need this; some don't.
 
-The needle should now cycle 0 → 25 → 50 → 75 → 100 → 50 → 0 km/h forever,
-two seconds a stop, printing each position:
+The servo should now cycle 0 → 25 → 50 → 75 → 100 → 50 km/h forever, two
+seconds a stop, printing each position:
 
 ```
 [bench] sweeping the dial -- no WiFi, no sleep.
@@ -93,44 +96,178 @@ two seconds a stop, printing each position:
 [wind] needle -> 25.0 km/h (-45 deg, 1000 us)
 ```
 
----
-
-## 4. Fit the needle
-
-Servo power is cut between stops, so you can reposition the horn by hand.
+Servo power is cut between stops, so you can reposition the horn by hand:
 
 1. Wait for the `0.0 km/h` line — the servo is now at one end of its travel.
 2. Pull the horn off the spline and refit it with the needle pointing at
-   **9 o'clock**. The splines are coarse, so you'll be within a few degrees;
-   `trimDeg` takes up the rest if your servo has travel to spare.
+   **9 o'clock**. The splines are coarse, so you'll be within a few degrees.
 3. Watch a full cycle. At `50.0 km/h` the needle should stand **straight up
    at 12**, and at `100.0 km/h` it should reach **3 o'clock**.
 
-If it doesn't line up, see the troubleshooting table at the bottom before
-changing anything mechanical — most of it is one line in `src/config.h`.
+If it doesn't line up, check the troubleshooting table before changing
+anything mechanical — most of it is one line in `src/config.h`.
 
 ---
 
-## 5. Wire it for real
+## 5. Configure
 
-**Running it from a USB-C charger?** Then you are very nearly done — the
-bench wiring *is* the finished wiring. Skip to
-[5a. Mains-powered build](#5a-mains-powered-build) below.
+Set your location in `src/config.h`:
 
-Power down and disconnect USB first.
+```cpp
+constexpr float kLatitude = 37.3167f;
+constexpr float kLongitude = -8.8000f;
+```
 
-### Pin assignments
+Right-click a spot in Google Maps and it gives you `latitude, longitude` in
+that order. It ships pointing at Aljezur, Portugal.
+
+The two settings you're most likely to want after that:
+
+```cpp
+constexpr ForecastQuery kForecast = {
+    ForecastMode::MaxOverHorizon,  // NextHour for current conditions
+    12,                            // hours to look ahead
+    false,                         // true to show gusts
+    WindUnit::Kph,
+};
+```
+
+WiFi credentials are passed at build time so they stay out of the repo:
+
+```sh
+export WINDCLOCK_WIFI_SSID="your-network"
+export WINDCLOCK_WIFI_PASSWORD="your-password"
+```
+
+On Windows PowerShell:
+
+```powershell
+$env:WINDCLOCK_WIFI_SSID="your-network"
+$env:WINDCLOCK_WIFI_PASSWORD="your-password"
+```
+
+These must be set in the **same shell** you run `pio` from. If you'd rather
+not retype them, put them in a `credentials.ini` — `.gitignore` already
+covers that filename.
+
+---
+
+## 6. Flash it
+
+```sh
+pio run -e usb -t upload
+pio device monitor
+```
+
+`-e usb` is the mains build: it skips the battery check and updates every
+5 minutes instead of 30.
+
+A healthy first boot:
+
+```
+[wind] wake #1
+[wind] battery 4.00 V, mode 0
+[wind] forecast 23.4 km/h (12 samples, index 5)
+[wind] needle -> 23.4 km/h (-48 deg, 1000 us)
+[wind] sleeping 300 s
+```
+
+The battery line always reads 4.00 V here — on the `usb` build it isn't
+measuring anything, by design.
+
+The board then deep sleeps and the serial port goes quiet for five minutes.
+**Press reset** to trigger another cycle rather than waiting.
+
+On the second cycle you'll usually see:
+
+```
+[wind] change within deadband; needle stays put
+```
+
+That's correct. The needle only moves when the wind changes by more than
+1.5 km/h, which keeps it from twitching every five minutes.
+
+---
+
+## 7. Hang it up
+
+Unplug from the computer, plug into the USB-C charger, and hang it
+somewhere.
+
+If it's dead from the charger but worked fine from your computer, see the
+CC-resistor entry in the troubleshooting table — it's a known quirk of
+cheap boards, not a fault.
+
+Come back in a day and check the needle roughly tracks the forecast on your
+phone. If it drifts out over a week, the likely cause is the servo horn
+creeping on its spline rather than anything in software.
+
+---
+
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Dead from a USB-C charger, fine from a computer | Board lacks the 5.1 kΩ CC pull-down resistors a USB-C source looks for | Use a **USB-A to USB-C cable** into an A-port charger. Nothing else is wrong |
+| Board resets whenever the servo moves | Servo on the 3.3 V pin, or an underpowered charger | Servo to **5V**; use a 1 A+ charger; fit the 470 µF |
+| Needle runs backwards — 100 km/h at 9 o'clock | Servo turns the other way | `kServo.reversed = true` |
+| Needle won't quite reach 9 or 3 | Servo doesn't make a true 180° | Widen `minPulseUs`/`maxPulseUs` to 400/2600, or lower `travelDeg` to what it really turns |
+| Needle slams into the end stop and buzzes | Same, in the other direction | Lower `travelDeg`, or narrow the pulse range |
+| `FATAL: servo travel cannot cover the dial` | `travelDeg` smaller than the 180° sweep, or `trimDeg` pushes it past the end | See "About that missing trim margin" in HARDWARE.md |
+| `WiFi failed` every cycle | 5 GHz network, or credentials not in the build | ESP32 is 2.4 GHz only; re-export the variables and rebuild |
+| `HTTP -1` or `HTTP -11` | DNS or TLS handshake failed | Usually a weak signal or a captive portal; check the board is actually on the network |
+| `forecast unusable` | Open-Meteo returned something unexpected | Check your coordinates are in range and in the right order |
+| Upload fails with "failed to connect" | Board not in bootloader | Hold **BOOT** during *Connecting...*; check the cable carries data |
+| Serial port shows nothing after the first cycle | It's in deep sleep, working correctly | Press reset |
+| `battery 0.00 V, mode 2`, needle never moves | Battery build with the divider not wired | Set `kBatterySenseFitted = false`, or build with `-e usb` |
+
+---
+
+## Going back to the bench
+
+Any time you want the sweep back — after changing the calibration, or to
+refit the needle:
+
+```sh
+pio run -e bench -t upload
+```
+
+Bench mode skips the battery check and WiFi entirely, so it works with
+nothing but the servo connected.
+
+---
+
+## Appendix A: Running it on a battery
+
+Only needed if the clock can't reach an outlet. Read
+"[Powering it](HARDWARE.md#powering-it)" first for which cell to buy — the
+short version is a 1S LiPo or 3× AA NiMH, and **not** a USB power bank.
+
+Build with `pio run -e esp32dev -t upload` instead of `-e usb`. Two things
+change: the update interval goes to 30 minutes, and the board reads its
+battery each cycle to decide when to slow down and when to stop driving the
+servo entirely.
+
+You'll also want a board that's actually built for battery use — a
+FireBeetle, TinyPICO or LOLIN32 Lite sleeps at 80–100 µA where a generic
+DevKitC sleeps at ~5 mA and flattens any pack inside a week. This single
+number matters more than everything else here.
+
+### Extra parts
+
+- P-channel MOSFET (AO3401) and two N-channel (2N7002 or BSS138)
+- 4× 100 kΩ, 1× 1 kΩ, 1× 100 nF
+- The 470 µF becomes mandatory rather than optional
+
+### Extra pins
 
 | Signal | GPIO | Notes |
 |---|---|---|
-| Servo signal | **18** | Straight to the servo's signal wire. |
-| Servo power enable | **25** | Gate of the power switch below. RTC-capable, so the level holds through deep sleep. |
-| Battery sense | **34** | Divider midpoint. ADC1 and input-only — ADC2 pins don't work while WiFi is on. |
-| Battery sense enable | **26** | Gates the divider. Also RTC-capable. |
+| Servo power enable | **25** | RTC-capable, so the level holds through deep sleep |
+| Battery sense | **34** | ADC1 and input-only — ADC2 pins don't work while WiFi is on |
+| Battery sense enable | **26** | Also RTC-capable |
 
-Change any of these in `src/config.h` if your board doesn't break them out,
-but keep 34 on ADC1 and keep 25/26 RTC-capable (0, 2, 4, 12–15, 25–27,
-32–39).
+Keep 34 on ADC1 and keep 25/26 RTC-capable (0, 2, 4, 12–15, 25–27, 32–39).
 
 ### Servo power switch
 
@@ -151,9 +288,8 @@ everything else combined, so it sits behind a high-side switch:
 - The 100 kΩ from the P-FET gate to VBAT holds the servo rail **off** by
   default.
 - The 100 kΩ on the N-FET gate holds it off while the ESP32 is in reset and
-  its pins float — without it, the servo can twitch on every boot.
+  its pins float — without it, the servo twitches on every boot.
 - GPIO25 high → servo powered. That's `kServoPowerActiveHigh = true`.
-- Put the 470 µF as close to the servo as you can.
 
 ### Battery sense divider
 
@@ -170,194 +306,23 @@ everything else combined, so it sits behind a high-side switch:
 GPIO26 goes high only during the measurement, so the divider isn't a
 permanent 21 µA drain. The 100 nF steadies the ADC.
 
-### Everything else
+### Then
 
 - Battery to the board's **VBAT / JST** input, and to the P-FET source.
 - **All grounds common** — battery, ESP32, servo.
-- Servo signal stays on GPIO 18; its red wire now comes from the switched
-  rail, not from 5V.
+- Match `kPower`'s thresholds to your cell — see "Battery thresholds" in
+  HARDWARE.md. They ship set for a 1S LiPo.
 
----
+A 1S cell gives the servo 3.0–4.2 V where an SG90 wants 4.8–6 V, so it'll
+be sluggish. If that bothers you, put a small 5 V boost module **after** the
+load switch: it's then unpowered during deep sleep, so its quiescent
+current only flows while the needle is actually moving.
 
-## 5a. Mains-powered build
-
-If the clock hangs near an outlet, drop the battery entirely. This removes
-the divider, both MOSFETs, the thresholds and every resistor — about
-two-thirds of the parts list.
-
-**Wiring** is what you already have from the bench test:
-
-| Servo wire | Goes to |
-|---|---|
-| Signal | **GPIO 18** |
-| V+ | **5V** / **VUSB** pin |
-| GND | **GND** |
-
-Then a USB-C charger into the board's USB port. Use one rated **1 A or
-more** — the servo and the WiFi transmit burst overlap badly on a 500 mA
-supply.
-
-This build actually treats the servo *better* than the battery one: it gets
-a proper 5 V instead of a LiPo's 3.0–4.2 V, so it is faster and stronger,
-and no boost module is needed.
-
-**Build it with:**
-
-```sh
-pio run -e usb -t upload
-```
-
-That flag does three things: skips the battery read (so an unwired sense
-pin cannot be mistaken for a flat cell), and drops the update interval from
-30 minutes to **5**, since nothing is being conserved. The clock still deep
-sleeps between updates — same code path, just a shorter nap.
-
-**The servo power switch is optional here.** Without the MOSFET the servo
-stays powered, but the firmware detaches the signal after each move, so the
-servo goes limp and draws almost nothing. Fit the switch anyway if a faint
-servo hum would bother you where the clock hangs.
-
-Skip step 5's wiring entirely and carry on from step 6. Everything in the
-troubleshooting table about batteries stops applying.
-
-### If the board won't power up from the charger
-
-Plug it in and nothing happens, but it works fine from a computer? The
-board is almost certainly missing the 5.1 kΩ CC pull-down resistors that a
-USB-C source looks for before it will deliver power. Plenty of cheap boards
-with USB-C sockets omit them.
-
-The fix is a **USB-A to USB-C cable** into an A-port charger, which has no
-such negotiation. Nothing is wrong with the board otherwise.
-
----
-
-## 6. Configure
-
-Edit `src/config.h`:
-
-```cpp
-// Where you want the forecast for. Ships pointing at Aljezur, Portugal.
-constexpr float kLatitude = 37.3167f;
-constexpr float kLongitude = -8.8000f;
-```
-
-Get your coordinates from any map — right-click a spot in Google Maps and
-it gives you `latitude, longitude` in that order.
-
-While you're in there, the two you're most likely to want:
-
-```cpp
-constexpr ForecastQuery kForecast = {
-    ForecastMode::MaxOverHorizon,  // NextHour for current conditions
-    12,                            // hours to look ahead
-    false,                         // true to show gusts
-    WindUnit::Kph,
-};
-
-constexpr PowerPolicy kPower = {
-    30 * 60,   // seconds between updates
-    ...
-};
-```
-
-WiFi credentials are passed at build time, so they stay out of the repo:
-
-```sh
-export WINDCLOCK_WIFI_SSID="your-network"
-export WINDCLOCK_WIFI_PASSWORD="your-password"
-```
-
-On Windows PowerShell:
-
-```powershell
-$env:WINDCLOCK_WIFI_SSID="your-network"
-$env:WINDCLOCK_WIFI_PASSWORD="your-password"
-```
-
-These must be set in the same shell you run `pio` from. If you'd rather not
-retype them, put them in a `credentials.ini` — `.gitignore` already covers
-that filename.
-
----
-
-## 7. Flash the real firmware
-
-```sh
-pio run -e esp32dev -t upload   # or -e usb for the mains build
-pio device monitor
-```
-
-A healthy first boot looks like this:
-
-```
-[wind] wake #1
-[wind] battery 4.02 V, mode 0
-[wind] forecast 23.4 km/h (12 samples, index 5)
-[wind] needle -> 23.4 km/h (-48 deg, 1000 us)
-[wind] sleeping 1800 s
-```
-
-`mode 0` is Normal, `1` is low battery, `2` is critical. On the `usb` build
-the battery line always reads 4.00 V and mode 0 — it is not measuring
-anything, by design.
-
-After that the board is in deep sleep and the serial port goes quiet for 30
-minutes, or 5 on the `usb` build. **Press reset** to trigger another cycle
-rather than waiting.
-
-On the second cycle you'll usually see:
-
-```
-[wind] change within deadband; needle stays put
-```
-
-That's correct — the needle only moves when the wind changes by more than
-1.5 km/h. It's the single biggest reason the battery lasts.
-
----
-
-## 8. Check it over a day
-
-Leave it running and come back. Things worth confirming:
-
-- The needle tracks the forecast on your phone's weather app, roughly.
-- It survives overnight — if it's dead in the morning, the board's sleep
-  current is the first suspect, not the code.
-- `[wind] battery` drops slowly and sensibly. A reading that jumps around
-  by half a volt usually means a missing 100 nF or a shared ground that
-  isn't.
-
----
-
-## Troubleshooting
+### Extra troubleshooting
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `battery 0.00 V, mode 2` and the needle never moves | Divider not fitted or not wired | Set `kBatterySenseFitted = false` in `config.h` until you wire it |
-| `mode 1` or `mode 2` on a freshly charged pack | Thresholds still set for a LiPo | Match `kPower` to your battery — see "Battery thresholds" in HARDWARE.md |
+| `mode 1` or `mode 2` on a freshly charged pack | Thresholds still set for a different cell | Match `kPower` — see HARDWARE.md |
 | Reboot loops once the battery is half used | Pack sagging under the WiFi current pulse | Alkaline cells or an undersized converter; see "Powering it" in HARDWARE.md |
-| `FATAL: servo travel cannot cover the dial` | `travelDeg` smaller than the 180° sweep, or `trimDeg` pushes it past the end | See "About that missing trim margin" in HARDWARE.md |
-| Needle runs backwards — 100 km/h at 9 o'clock | Servo turns the other way | `kServo.reversed = true` |
-| Needle won't quite reach 9 or 3 | Servo doesn't make a true 180° | Widen `minPulseUs`/`maxPulseUs` to 400/2600, or lower `travelDeg` to what it really turns |
-| Needle slams into the end stop and buzzes | Same, in the other direction | Lower `travelDeg`, or narrow the pulse range |
-| Board resets whenever the servo moves | Servo on the 3.3 V rail, or no bulk capacitor | Servo from the switched battery rail; add the 470 µF |
-| `WiFi failed` every cycle | 5 GHz network, or credentials not in the build | ESP32 is 2.4 GHz only; re-export the variables and rebuild |
-| `HTTP -1` or `HTTP -11` | DNS or TLS handshake failed | Usually a weak signal or a captive portal; check the board is actually on the network |
-| `forecast unusable` | Open-Meteo returned something unexpected | Check your coordinates are in range and in the right order |
-| Upload fails with "failed to connect" | Board not in bootloader | Hold **BOOT** during *Connecting...*; check the cable carries data |
-| Dead from a USB-C charger, fine from a computer | Board lacks the CC pull-down resistors | Use a USB-A to USB-C cable — see step 5a |
-| Serial port shows nothing after the first cycle | It's in deep sleep, working correctly | Press reset |
+| Flat in a week | Board's sleep current, not the code | Check it's a battery-oriented board, not a DevKitC |
 | Servo twitches on every boot | Missing 100 kΩ pulldown on the N-FET gate | Add it |
-
-## Going back to the bench
-
-Any time you want the sweep back — after changing the calibration, or to
-refit the needle:
-
-```sh
-pio run -e bench -t upload
-```
-
-Bench mode skips the battery check and WiFi entirely, so it works with
-nothing but the servo connected.
