@@ -45,6 +45,13 @@ constexpr int kBatterySensePin = 34;
 constexpr int kBatterySenseEnablePin = 26;
 constexpr float kBatteryDividerRatio = 2.0f;
 
+// Set false on a first build that has no battery divider fitted yet. An
+// unconnected ADC pin floats and reads as a flat cell, which would put the
+// clock straight into critical mode and stop it ever driving the servo.
+constexpr bool kBatterySenseFitted = true;
+// Assumed battery voltage when the divider is not fitted.
+constexpr float kAssumedBatteryVolts = 4.0f;
+
 // Milliseconds to hold the servo powered after commanding a position.
 // Long enough for the needle to settle across the full sweep.
 constexpr uint32_t kServoSettleMs = 1200;

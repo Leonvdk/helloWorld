@@ -48,6 +48,8 @@ void servoPower(bool on) {
 }
 
 float readBatteryVolts() {
+  if (!config::kBatterySenseFitted) return config::kAssumedBatteryVolts;
+
   digitalWrite(config::kBatterySenseEnablePin, HIGH);
   delay(5); // let the divider settle
 
@@ -143,6 +145,24 @@ void moveNeedle(float windKph) {
   servoPower(false);
 }
 
+#ifdef WINDCLOCK_BENCH_MODE
+// Walks the needle over the whole scale and keeps doing it. No WiFi, no
+// deep sleep -- for fitting the needle and checking it reaches both end
+// stops. Never returns. Built by `pio run -e bench -t upload`.
+void runBenchSweep() {
+  static const float kStops[] = {0.0f, 25.0f, 50.0f, 75.0f, 100.0f, 50.0f};
+  Serial.println(F("[bench] sweeping the dial -- no WiFi, no sleep."));
+  Serial.println(F("[bench] servo power is cut between stops, so the horn "
+                   "can be repositioned by hand."));
+  for (;;) {
+    for (const float kph : kStops) {
+      moveNeedle(kph);
+      delay(2000);
+    }
+  }
+}
+#endif
+
 void sleepFor(uint32_t seconds) {
   if (seconds == 0) seconds = 1;
   Serial.printf("[wind] sleeping %u s\n", seconds);
@@ -187,6 +207,10 @@ void setup() {
     sleepFor(config::kPower.criticalSleepSeconds);
     return;
   }
+
+#ifdef WINDCLOCK_BENCH_MODE
+  runBenchSweep(); // never returns
+#endif
 
   const float volts = readBatteryVolts();
   gPowerMode = classifyBattery(config::kPower, volts, gPowerMode);
