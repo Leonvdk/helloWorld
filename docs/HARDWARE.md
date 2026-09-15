@@ -79,6 +79,7 @@ current is the thing that decides how long the clock runs.
 | 2x AA alkaline | 3.1 V | 2.0 V | **Avoid.** See below. |
 | 2x AA lithium primary | 3.6 V | 2.0 V | Workable with a low-Iq boost. Much lower internal resistance than alkaline and a flatter discharge, but the boost's idle current still applies. |
 | 3x AA alkaline | 4.5 V | 3.0 V | Works via a low-quiescent LDO or buck. Alkaline sags under the WiFi pulses as it depletes, so NiMH is the better cell. |
+| 9 V PP3 block | 9 V | 6 V | **Worst of the lot.** Least energy of anything here and the most conversion needed. See below. |
 
 ### Why not 2x AA
 
@@ -102,6 +103,37 @@ and that is where the idea comes apart:
 
 Energy-wise two AA cells are actually in the same ballpark as a 2000 mAh
 LiPo. The problem is entirely delivery, not capacity.
+
+### Why not a 9 V block
+
+Voltage is not energy, and a PP3 is six very small cells in series. Stored
+energy, roughly:
+
+| Pack | Energy |
+|---|---|
+| 3x AA alkaline | ~11 Wh |
+| 1S LiPo 2000 mAh | ~7.4 Wh |
+| 3x AA NiMH 2000 mAh | ~7.2 Wh |
+| **9 V PP3 alkaline** | **~5 Wh** |
+
+So it starts with the least to give, and then has the furthest to fall:
+
+- **A linear regulator throws most of it away.** Dropping 9 V to 3.3 V in an
+  AMS1117 burns 63% of every joule as heat, and the regulator's own
+  quiescent current is around 5 mA — 250 times this design's sleep current.
+  That combination gets you days, not months.
+- **A buck converter is better but still needs care.** 85–90% efficient, but
+  a generic module idles in the milliamps. As with the boost, you need a
+  genuine low-Iq part.
+- **The servo needs its own rail.** 9 V straight to an SG90 destroys it, so
+  that is a second regulator.
+- **High internal resistance.** A PP3 is 1.5–2 Ω fresh and worse as it
+  depletes, so the WiFi current pulse pulls it down hard and the usable
+  capacity is well below the rated 550 mAh.
+
+The one thing a 9 V block has going for it is a tidy snap connector. If that
+is the appeal, a 3x AA holder with a switch is barely larger, holds more
+energy, costs less to refill and needs no converter at all.
 
 ### Battery thresholds
 
