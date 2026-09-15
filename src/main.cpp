@@ -166,7 +166,7 @@ void runBenchSweep() {
 
 void sleepFor(uint32_t seconds) {
   if (seconds == 0) seconds = 1;
-  Serial.printf("[wind] sleeping %u s\n", seconds);
+  Serial.printf("[wind] sleeping %u s\n", static_cast<unsigned>(seconds));
   Serial.flush();
 
   gSecondsSinceGoodUpdate += seconds;
@@ -190,7 +190,7 @@ void setup() {
   Serial.begin(115200);
   delay(50);
   ++gWakeCount;
-  Serial.printf("\n[wind] wake #%u\n", gWakeCount);
+  Serial.printf("\n[wind] wake #%u\n", static_cast<unsigned>(gWakeCount));
 
   gpio_deep_sleep_hold_dis();
   gpio_hold_dis(static_cast<gpio_num_t>(config::kServoPowerPin));
