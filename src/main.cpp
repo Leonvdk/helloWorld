@@ -127,7 +127,8 @@ void moveNeedle(float windKph) {
   const uint16_t pulseUs =
       windKphToPulseUs(config::kServo, config::kDial, windKph);
   Serial.printf("[wind] needle -> %.1f km/h (%.0f deg, %u us)\n", windKph,
-                windToDialDeg(config::kDial, windKph), pulseUs);
+                windToDialDeg(config::kDial, windKph),
+                static_cast<unsigned>(pulseUs));
 
   servoPower(true);
   delay(config::kServoPowerRiseMs);
