@@ -1,13 +1,10 @@
 // Turns a position on the clock face into a servo pulse width.
 //
-// The dial needs 330 degrees of needle travel, which is more than a plain
-// hobby servo can do. Two ways out, both covered here:
-//
-//   * a 360-degree *positional* servo driving the needle directly
-//     (travelDeg = 360, gearRatio = 1);
-//   * a 180- or 270-degree servo geared up, e.g. a 2:1 pulley pair so
-//     165 degrees of shaft becomes 330 degrees of needle
-//     (travelDeg = 180, gearRatio = 2).
+// The 9-to-3 dial needs 180 degrees of needle travel, so a standard hobby
+// servo drives the needle directly (travelDeg = 180, gearRatio = 1). The
+// gearing and travel are still configurable, for a servo that does not
+// quite make its nominal 180, or a 270-degree servo used with trim to
+// centre the sweep.
 //
 // dialFitsCalibration() says whether the hardware can actually reach the
 // whole scale, so a mismatch shows up at startup instead of as a needle
@@ -29,8 +26,9 @@ struct ServoCalibration {
   float travelDeg = 360.0f;
   // Needle degrees per shaft degree. 1.0 for a direct drive.
   float gearRatio = 1.0f;
-  // Shaft angle that puts the needle at the 12 o'clock end of the dial.
-  // Use it to take up the slop after assembling the gear train.
+  // Shaft angle that puts the needle at the calm end of the dial, i.e. at
+  // DialSpec::minDialDeg. Use it to take up the slop after assembly, and
+  // to centre a sweep inside a servo with travel to spare.
   float trimDeg = 0.0f;
   // True if increasing pulse width turns the needle anticlockwise.
   bool reversed = false;
@@ -44,8 +42,11 @@ float requiredShaftDeg(const ServoCalibration &cal, const DialSpec &spec);
 // True if the servo can reach both ends of the dial, trim included.
 bool dialFitsCalibration(const ServoCalibration &cal, const DialSpec &spec);
 
-// Needle angle -> shaft angle, clamped into the servo's travel.
-float dialDegToShaftDeg(const ServoCalibration &cal, float dialDeg);
+// Needle angle -> shaft angle, clamped into the servo's travel. Measured
+// from the calm end of the dial, so the servo's zero lines up with
+// DialSpec::minDialDeg wherever that sits on the face.
+float dialDegToShaftDeg(const ServoCalibration &cal, const DialSpec &spec,
+                        float dialDeg);
 
 // Shaft angle -> pulse width, clamped into the servo's pulse range.
 uint16_t shaftDegToPulseUs(const ServoCalibration &cal, float shaftDeg);

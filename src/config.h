@@ -51,24 +51,28 @@ constexpr uint32_t kServoSettleMs = 1200;
 constexpr uint32_t kServoPowerRiseMs = 50;
 
 // -------------------------------------------------------------------- dial
-// 0 km/h at 12 o'clock, 100 km/h at 11 o'clock, clockwise.
+// 0 km/h at 9 o'clock, 50 straight up at 12, 100 km/h at 3 o'clock.
+// A 180 degree sweep clockwise across the top of the face.
 constexpr DialSpec kDial = {
     /*minWindKph=*/0.0f,
     /*maxWindKph=*/100.0f,
-    /*minDialDeg=*/0.0f,
-    /*maxDialDeg=*/330.0f,
+    /*minDialDeg=*/-90.0f, // 9 o'clock
+    /*maxDialDeg=*/90.0f,  // 3 o'clock
 };
 
 // ------------------------------------------------------------------- servo
-// Default build: a 180-degree servo geared 2:1, so 165 degrees of shaft
-// swings the needle the full 330 degrees. For a 360-degree positional
-// servo driving the needle directly, use travelDeg 360 / gearRatio 1.
+// A standard 180 degree servo on the needle shaft, no gearing. The sweep
+// uses the servo's full travel, so there is no trim margin: if your servo
+// falls a little short of its nominal 180, either widen the pulse range or
+// drop travelDeg to what it really turns and accept a slightly compressed
+// scale. A 270 degree servo with travelDeg 270 and trimDeg 45 gives the
+// same dial with room to spare at both ends.
 constexpr ServoCalibration kServo = {
     /*minPulseUs=*/500,
     /*maxPulseUs=*/2500,
     /*travelDeg=*/180.0f,
-    /*gearRatio=*/2.0f,
-    /*trimDeg=*/7.5f,
+    /*gearRatio=*/1.0f,
+    /*trimDeg=*/0.0f,
     /*reversed=*/false,
 };
 

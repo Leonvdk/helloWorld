@@ -29,16 +29,19 @@ float requiredShaftDeg(const ServoCalibration &cal, const DialSpec &spec) {
 bool dialFitsCalibration(const ServoCalibration &cal, const DialSpec &spec) {
   if (!calibrationIsValid(cal) || !dialSpecIsValid(spec)) return false;
   if (cal.trimDeg < 0.0f || cal.trimDeg > cal.travelDeg) return false;
-  // Allow a hair of tolerance so a 2:1 gear train on a 165-degree
-  // requirement isn't rejected by float noise.
+  // Allow a hair of tolerance so a sweep that exactly fills the servo's
+  // travel isn't rejected by float noise.
   constexpr float kEpsilonDeg = 1e-3f;
   return cal.trimDeg + requiredShaftDeg(cal, spec) <= cal.travelDeg + kEpsilonDeg;
 }
 
-float dialDegToShaftDeg(const ServoCalibration &cal, float dialDeg) {
-  if (!calibrationIsValid(cal)) return 0.0f;
+float dialDegToShaftDeg(const ServoCalibration &cal, const DialSpec &spec,
+                        float dialDeg) {
+  if (!calibrationIsValid(cal) || !dialSpecIsValid(spec)) return 0.0f;
   if (!std::isfinite(dialDeg)) return clampf(cal.trimDeg, 0.0f, cal.travelDeg);
-  const float shaft = cal.trimDeg + dialDeg / cal.gearRatio;
+  // Shaft zero sits at the calm end of the dial, not at 12 o'clock.
+  const float shaft =
+      cal.trimDeg + (dialDeg - spec.minDialDeg) / cal.gearRatio;
   return clampf(shaft, 0.0f, cal.travelDeg);
 }
 
@@ -58,8 +61,8 @@ uint16_t shaftDegToPulseUs(const ServoCalibration &cal, float shaftDeg) {
 
 uint16_t windKphToPulseUs(const ServoCalibration &cal, const DialSpec &spec,
                           float windKph) {
-  return shaftDegToPulseUs(cal,
-                           dialDegToShaftDeg(cal, windToDialDeg(spec, windKph)));
+  return shaftDegToPulseUs(
+      cal, dialDegToShaftDeg(cal, spec, windToDialDeg(spec, windKph)));
 }
 
 } // namespace windclock

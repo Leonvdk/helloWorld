@@ -1,28 +1,36 @@
 # Hardware
 
-## The 330-degree problem
+## The servo
 
-The dial asks for 0 km/h at 12 o'clock and 100 km/h at 11 o'clock, going
-clockwise. That is **330 degrees of needle travel**, and an ordinary hobby
-servo only turns 180. Reaching the whole scale needs one of these:
+The dial runs 0 km/h at 9 o'clock, up through 12 o'clock at half scale, to
+100 km/h at 3 o'clock: **180 degrees of needle travel**, which is exactly
+what a standard hobby servo turns. The servo horn goes straight on the
+needle shaft — no gears, no belt.
 
-| Build | `travelDeg` | `gearRatio` | Notes |
-|---|---|---|---|
-| **180-degree servo, geared 2:1** *(shipped default)* | `180` | `2.0` | 165 degrees of shaft becomes 330 of needle. Cheapest, and an SG90/MG90S is plenty. Costs you half the angular resolution and adds backlash. |
-| 270-degree servo, geared 1.25:1 | `270` | `1.25` | 264 shaft degrees. Less gearing, less backlash. |
-| 360-degree **positional** servo, direct | `360` | `1.0` | Simplest mechanically, no gear train. Must be a *positional* 360 servo (e.g. a sail-winch servo or a DS3218-360), **not** a continuous-rotation servo — those take a speed, not an angle, and cannot hold a position. |
+| Build | `travelDeg` | `gearRatio` | `trimDeg` | Notes |
+|---|---|---|---|---|
+| **180-degree servo, direct** *(shipped default)* | `180` | `1.0` | `0` | An SG90 or MG90S does it. Uses the servo's entire travel, so there is no trim margin — see below. |
+| 270-degree servo, direct | `270` | `1.0` | `45` | The comfortable option. The sweep sits in the middle of the travel with 45 degrees spare at each end, so assembly slop and a servo that over- or under-travels are both absorbed by trim. |
+| Geared, any servo | your travel | ratio | to suit | Still supported. `gearRatio` is needle degrees per shaft degree, so a 2:1 step-up is `2.0`. |
 
 `dialFitsCalibration()` checks the configured servo can actually reach both
 ends of the scale, and the firmware refuses to run if it cannot, rather than
 showing a needle silently stuck at 80 km/h.
 
-### Gearing it 2:1
+### About that missing trim margin
 
-Two GT2 pulleys, 20 tooth on the servo and 40 tooth on the needle shaft,
-with a short belt. Anything with a 2:1 ratio and little backlash works —
-spur gears are fine too, but reverse the needle direction if you use a
-single pair (set `reversed = true`), since one meshing pair reverses the
-rotation.
+A nominal "180 degree" servo rarely turns exactly 180, and 500–2500 µs may
+drive it a little past or a little short. With the shipped config the sweep
+consumes the whole travel, so there is nothing left over to trim with. If
+the needle can't quite reach 9 or 3:
+
+- widen `minPulseUs` / `maxPulseUs` (many servos accept 400–2600), or
+- measure what the servo really turns, set `travelDeg` to that, and accept
+  a scale compressed by a few degrees, or
+- fit a 270-degree servo and use the row above.
+
+If the needle runs backwards — 100 km/h at 9 o'clock — set `reversed = true`
+rather than flipping the dial angles around.
 
 ## Parts
 
@@ -76,11 +84,14 @@ forecasts are hourly anyway, so half-hourly updates are already generous.
 
 ## Calibration
 
-1. Set `travelDeg` and `gearRatio` for your build in `src/config.h`.
+1. Set `travelDeg` (and `gearRatio`, if you geared it) for your build in
+   `src/config.h`.
 2. Run `make table` to see where each wind speed lands and what pulse gets
    it there.
-3. Fit the needle at 12 o'clock with the servo commanded to 0 km/h.
-4. Adjust `trimDeg` to take up the slack. The shipped 7.5 degrees centres
-   the 165-degree sweep inside a 180-degree servo's travel, leaving margin
-   at both end stops.
-5. If the needle runs anticlockwise, set `reversed = true`.
+3. Command 0 km/h — 500 µs with the shipped config — and fit the needle
+   pointing at 9 o'clock.
+4. Command 100 km/h and check it reaches 3 o'clock. If it falls short or
+   runs into the end stop, see "About that missing trim margin" above.
+5. On a servo with travel to spare, `trimDeg` shifts the whole sweep round
+   to line the zero up exactly.
+6. If the needle runs anticlockwise, set `reversed = true`.

@@ -13,7 +13,7 @@ bool dialSpecIsValid(const DialSpec &spec) {
   if (!finite(spec.minWindKph) || !finite(spec.maxWindKph)) return false;
   if (!finite(spec.minDialDeg) || !finite(spec.maxDialDeg)) return false;
   if (spec.maxWindKph <= spec.minWindKph) return false;
-  if (spec.maxDialDeg == spec.minDialDeg) return false;
+  if (spec.maxDialDeg <= spec.minDialDeg) return false;
   return true;
 }
 

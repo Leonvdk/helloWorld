@@ -1,4 +1,4 @@
-// Servo calibration: pulse widths, gearing, trim and travel limits.
+// Servo calibration: pulse widths, trim, gearing and travel limits.
 #include <limits>
 
 #include "core/servo_map.h"
@@ -8,24 +8,18 @@ using namespace windclock;
 
 namespace {
 
-// The default build: 180 degree servo, geared 2:1 for a 330 degree needle.
-ServoCalibration geared() {
-  ServoCalibration cal;
-  cal.travelDeg = 180.0f;
-  cal.gearRatio = 2.0f;
-  cal.trimDeg = 0.0f;
+// The shipped build: a 180 degree servo on the needle, no gearing.
+ServoCalibration direct() { return ServoCalibration{500, 2500, 180.0f, 1.0f, 0.0f, false}; }
+
+// The roomier alternative: a 270 degree servo, sweep centred with trim.
+ServoCalibration roomy() {
+  ServoCalibration cal = direct();
+  cal.travelDeg = 270.0f;
+  cal.trimDeg = 45.0f;
   return cal;
 }
 
-// The alternative build: a 360 degree positional servo, direct drive.
-ServoCalibration direct() {
-  ServoCalibration cal;
-  cal.travelDeg = 360.0f;
-  cal.gearRatio = 1.0f;
-  return cal;
-}
-
-DialSpec spec() { return DialSpec{}; }
+DialSpec spec() { return DialSpec{}; } // -90 .. +90 degrees
 
 constexpr float kTol = 0.01f;
 
@@ -34,8 +28,8 @@ constexpr float kTol = 0.01f;
 TEST(ServoMap, PulseEndpointsMatchCalibration) {
   const ServoCalibration cal = direct();
   CHECK_EQ(shaftDegToPulseUs(cal, 0.0f), 500);
-  CHECK_EQ(shaftDegToPulseUs(cal, 360.0f), 2500);
-  CHECK_EQ(shaftDegToPulseUs(cal, 180.0f), 1500);
+  CHECK_EQ(shaftDegToPulseUs(cal, 180.0f), 2500);
+  CHECK_EQ(shaftDegToPulseUs(cal, 90.0f), 1500);
 }
 
 TEST(ServoMap, PulseIsClampedToTravel) {
@@ -44,65 +38,72 @@ TEST(ServoMap, PulseIsClampedToTravel) {
   CHECK_EQ(shaftDegToPulseUs(cal, 720.0f), 2500);
 }
 
-TEST(ServoMap, GearRatioHalvesTheShaftAngle) {
-  const ServoCalibration cal = geared();
-  // 330 degrees of needle needs 165 degrees of shaft at 2:1.
-  CHECK_NEAR(dialDegToShaftDeg(cal, 330.0f), 165.0f, kTol);
-  CHECK_NEAR(dialDegToShaftDeg(cal, 0.0f), 0.0f, kTol);
-  CHECK_NEAR(dialDegToShaftDeg(cal, 165.0f), 82.5f, kTol);
+TEST(ServoMap, ShaftAngleIsMeasuredFromTheCalmEndOfTheDial) {
+  // The dial runs -90..+90, but the servo shaft still runs 0..180: the
+  // needle's 9 o'clock is the servo's zero.
+  const ServoCalibration cal = direct();
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), -90.0f), 0.0f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), 0.0f), 90.0f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), 90.0f), 180.0f, kTol);
 }
 
 TEST(ServoMap, TrimOffsetsTheWholeSweep) {
-  ServoCalibration cal = geared();
-  cal.trimDeg = 7.5f;
-  CHECK_NEAR(dialDegToShaftDeg(cal, 0.0f), 7.5f, kTol);
-  CHECK_NEAR(dialDegToShaftDeg(cal, 330.0f), 172.5f, kTol);
-  // Still inside a 180 degree servo's travel.
+  const ServoCalibration cal = roomy();
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), -90.0f), 45.0f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), 90.0f), 225.0f, kTol);
+  // Centred, with 45 degrees spare at each end.
+  CHECK_NEAR(cal.travelDeg - 225.0f, 45.0f, kTol);
   CHECK_TRUE(dialFitsCalibration(cal, spec()));
+}
+
+TEST(ServoMap, GearRatioScalesTheShaftAngle) {
+  ServoCalibration cal = direct();
+  cal.gearRatio = 2.0f; // 2 needle degrees per shaft degree
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), -90.0f), 0.0f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(cal, spec(), 90.0f), 90.0f, kTol);
+  CHECK_NEAR(requiredShaftDeg(cal, spec()), 90.0f, kTol);
 }
 
 TEST(ServoMap, ReversedServoMirrorsThePulse) {
   ServoCalibration cal = direct();
   cal.reversed = true;
   CHECK_EQ(shaftDegToPulseUs(cal, 0.0f), 2500);
-  CHECK_EQ(shaftDegToPulseUs(cal, 360.0f), 500);
-  CHECK_EQ(shaftDegToPulseUs(cal, 180.0f), 1500);
+  CHECK_EQ(shaftDegToPulseUs(cal, 180.0f), 500);
+  CHECK_EQ(shaftDegToPulseUs(cal, 90.0f), 1500);
+  // Calm now sits at the long pulse rather than the short one.
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 0.0f), 2500);
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 500);
 }
 
-TEST(ServoMap, DefaultGearedBuildCoversTheDial) {
-  CHECK_TRUE(dialFitsCalibration(geared(), spec()));
-  CHECK_NEAR(requiredShaftDeg(geared(), spec()), 165.0f, kTol);
-}
-
-TEST(ServoMap, DirectDriveNeedsThreeHundredAndSixtyDegreeServo) {
+TEST(ServoMap, ShippedBuildUsesTheServosFullTravel) {
   CHECK_TRUE(dialFitsCalibration(direct(), spec()));
-  CHECK_NEAR(requiredShaftDeg(direct(), spec()), 330.0f, kTol);
+  CHECK_NEAR(requiredShaftDeg(direct(), spec()), 180.0f, kTol);
+  // Exactly 180 of 180: no trim margin left, which is the trade for
+  // dropping the gear train.
+  CHECK_NEAR(direct().travelDeg - requiredShaftDeg(direct(), spec()), 0.0f,
+             kTol);
 }
 
-TEST(ServoMap, PlainHobbyServoWithoutGearingIsRejected) {
-  // This is the trap the whole design turns on: a 180 degree servo driven
-  // directly cannot reach 11 o'clock, and must be caught at startup.
+TEST(ServoMap, ServoThatFallsShortOfOneEightyIsRejected) {
   ServoCalibration cal = direct();
-  cal.travelDeg = 180.0f;
-  cal.gearRatio = 1.0f;
+  cal.travelDeg = 170.0f;
   CHECK_FALSE(dialFitsCalibration(cal, spec()));
 }
 
 TEST(ServoMap, TrimThatPushesTheSweepPastTheEndStopIsRejected) {
-  ServoCalibration cal = geared();
-  cal.trimDeg = 20.0f; // 20 + 165 = 185 > 180
+  ServoCalibration cal = direct();
+  cal.trimDeg = 10.0f; // 10 + 180 = 190 > 180
   CHECK_FALSE(dialFitsCalibration(cal, spec()));
 }
 
 TEST(ServoMap, NegativeTrimIsRejected) {
-  ServoCalibration cal = geared();
+  ServoCalibration cal = direct();
   cal.trimDeg = -5.0f;
   CHECK_FALSE(dialFitsCalibration(cal, spec()));
 }
 
 TEST(ServoMap, RejectsUnusableCalibrations) {
-  ServoCalibration cal = direct();
-  CHECK_TRUE(calibrationIsValid(cal));
+  CHECK_TRUE(calibrationIsValid(direct()));
 
   ServoCalibration backwardsPulses = direct();
   backwardsPulses.minPulseUs = 2500;
@@ -129,25 +130,38 @@ TEST(ServoMap, InvalidCalibrationYieldsNoPulse) {
   CHECK_EQ(windKphToPulseUs(cal, spec(), 50.0f), 0);
 }
 
+TEST(ServoMap, InvalidDialYieldsTheShaftZero) {
+  DialSpec broken = spec();
+  broken.maxDialDeg = broken.minDialDeg;
+  CHECK_NEAR(dialDegToShaftDeg(direct(), broken, 0.0f), 0.0f, kTol);
+}
+
 TEST(ServoMap, NonFiniteAngleFallsBackToTheTrimPosition) {
-  ServoCalibration cal = geared();
-  cal.trimDeg = 7.5f;
   const float nan = std::numeric_limits<float>::quiet_NaN();
-  CHECK_NEAR(dialDegToShaftDeg(cal, nan), 7.5f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(roomy(), spec(), nan), 45.0f, kTol);
+  CHECK_NEAR(dialDegToShaftDeg(direct(), spec(), nan), 0.0f, kTol);
 }
 
 TEST(ServoMap, WindMapsStraightToAPulseWidth) {
-  const ServoCalibration cal = geared();
-  // 0 km/h -> 0 deg shaft -> minimum pulse.
-  CHECK_EQ(windKphToPulseUs(cal, spec(), 0.0f), 500);
-  // 100 km/h -> 165 of 180 deg -> 500 + (165/180) * 2000 = 2333 us.
-  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 2333);
-  // 50 km/h -> 82.5 of 180 deg -> 1417 us.
-  CHECK_EQ(windKphToPulseUs(cal, spec(), 50.0f), 1417);
+  const ServoCalibration cal = direct();
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 0.0f), 500);   // 9 o'clock
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 50.0f), 1500); // 12 o'clock
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 2500); // 3 o'clock
+  // 20 us per km/h, right across the scale.
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 25.0f), 1000);
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 75.0f), 2000);
+}
+
+TEST(ServoMap, RoomyBuildGivesTheSameDialOverASmallerPulseSpan) {
+  const ServoCalibration cal = roomy();
+  // 45..225 of 270 degrees maps to the middle two thirds of the pulses.
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 0.0f), 833);
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 50.0f), 1500);
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 2167);
 }
 
 TEST(ServoMap, PulseWidthRisesWithWindAndStaysInRange) {
-  const ServoCalibration cal = geared();
+  const ServoCalibration cal = direct();
   uint16_t previous = 0;
   for (float kph = 0.0f; kph <= 100.0f; kph += 1.0f) {
     const uint16_t pulse = windKphToPulseUs(cal, spec(), kph);
@@ -156,20 +170,20 @@ TEST(ServoMap, PulseWidthRisesWithWindAndStaysInRange) {
     CHECK_TRUE(pulse <= cal.maxPulseUs);
     previous = pulse;
   }
-  CHECK_TRUE(previous > 2000);
+  CHECK_EQ(previous, 2500);
 }
 
 TEST(ServoMap, OverspeedWindDoesNotDriveTheServoPastItsEndStop) {
-  const ServoCalibration cal = geared();
-  const uint16_t atFullScale = windKphToPulseUs(cal, spec(), 100.0f);
-  CHECK_EQ(windKphToPulseUs(cal, spec(), 250.0f), atFullScale);
+  const ServoCalibration cal = direct();
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 250.0f), 2500);
 }
 
 TEST(ServoMap, NarrowPulseRangeServoStillSpansTheDial) {
   // Some servos only honour 1000..2000 us.
-  ServoCalibration cal = geared();
+  ServoCalibration cal = direct();
   cal.minPulseUs = 1000;
   cal.maxPulseUs = 2000;
   CHECK_EQ(windKphToPulseUs(cal, spec(), 0.0f), 1000);
-  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 1917); // 1000 + 165/180*1000
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 50.0f), 1500);
+  CHECK_EQ(windKphToPulseUs(cal, spec(), 100.0f), 2000);
 }

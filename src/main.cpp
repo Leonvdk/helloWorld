@@ -1,5 +1,8 @@
 // Wind clock firmware for the ESP32.
 //
+// The needle reads 0 km/h at 9 o'clock, half scale straight up at 12, and
+// 100 km/h at 3 o'clock.
+//
 // One wake cycle:
 //   1. read the battery, decide whether the servo may run at all;
 //   2. join WiFi and fetch the hourly wind forecast;
@@ -180,7 +183,7 @@ void setup() {
   // runtime condition -- say so loudly instead of showing a wrong number.
   if (!dialFitsCalibration(config::kServo, config::kDial)) {
     Serial.println(F("[wind] FATAL: servo travel cannot cover the dial; "
-                     "check kServo.travelDeg / gearRatio in config.h"));
+                     "check kServo.travelDeg / trimDeg in config.h"));
     sleepFor(config::kPower.criticalSleepSeconds);
     return;
   }

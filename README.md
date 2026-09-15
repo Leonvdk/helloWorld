@@ -1,29 +1,29 @@
 # Wind clock
 
 A clock face with one arm, driven by a servo on an ESP32, showing how hard
-the wind is going to blow. **0 km/h parks the arm at 12 o'clock and it
-sweeps clockwise as the wind picks up, reaching 11 o'clock at 100 km/h.**
+the wind is going to blow. **0 km/h parks the arm at 9 o'clock, half scale
+stands it straight up at 12, and it reaches 3 o'clock at 100 km/h** — a
+180 degree sweep clockwise across the top of the face.
 
 Battery powered: it wakes every half hour, fetches the hourly wind forecast
 from [Open-Meteo](https://open-meteo.com), moves the needle if the wind has
 meaningfully changed, and goes back to deep sleep.
 
 ```
-  km/h    needle     face       km/h    needle     face
-     0      0.0°    12:00         60    198.0°     6:36
-    10     33.0°     1:06         70    231.0°     7:42
-    25     82.5°     2:45         85    280.5°     9:21
-    50    165.0°     5:30        100    330.0°    11:00
+  km/h    needle     face     pulse       km/h    needle     face     pulse
+     0    -90.0°     9:00     500 us        60     18.0°    12:36    1700 us
+    10    -72.0°     9:36     700 us        75     45.0°     1:30    2000 us
+    25    -45.0°    10:30    1000 us        90     72.0°     2:24    2300 us
+    50      0.0°    12:00    1500 us       100     90.0°     3:00    2500 us
 ```
 
-## Heads up: 330 degrees is more than a servo turns
-
-12 o'clock round to 11 o'clock is 330 degrees of needle travel, and a plain
-hobby servo only manages 180. The default configuration assumes a **180
-degree servo geared 2:1**, so 165 degrees of shaft swings the needle the
-full 330. A 360-degree *positional* servo driving the needle directly works
-too — one line of config. [docs/HARDWARE.md](docs/HARDWARE.md) lays out the
-options, the wiring and the power budget.
+180 degrees is exactly what a standard hobby servo turns, so the horn goes
+straight onto the needle shaft — no gears, no belt, and a clean 20 µs of
+pulse width per km/h. The one catch is that the sweep uses the servo's
+entire travel, leaving no margin for a servo that doesn't quite make its
+nominal 180; [docs/HARDWARE.md](docs/HARDWARE.md) covers that, the wiring
+and the power budget. Gearing and a 270-degree servo are both still a
+config line away.
 
 The firmware checks at startup that the configured servo can actually reach
 both ends of the dial, and refuses to run if it cannot.
@@ -41,7 +41,7 @@ src/
     forecast_url.*      builds the API request
     needle_filter.*     deadband and slew limit, so the servo stays still
     power_policy.*      battery thresholds, sleep intervals, backoff
-test/                   115 tests, run natively with g++
+test/                   120 tests, run natively with g++
 tools/dial_table.cpp    prints the dial for marking up the face
 ```
 
@@ -51,17 +51,19 @@ so the whole suite builds and runs on a laptop in about a second.
 ## Tests
 
 ```sh
-make test     # build and run all 115 tests
+make test     # build and run all 120 tests
 make table    # print the dial as a calibration table
 ```
 
 Needs nothing but `g++` and `make`. What's covered:
 
-- **Dial** — 0 at 12 o'clock and 100 at 11 o'clock, monotonic clockwise
-  travel, known speeds landing on the expected hours, clamping above and
-  below the scale, NaN and infinity, round-tripping, custom scales.
-- **Servo** — pulse endpoints, gear ratios, trim, reversed servos, narrow
-  pulse ranges, and rejecting a calibration that cannot reach 11 o'clock.
+- **Dial** — 0 at 9 o'clock, half scale at 12 and 100 at 3, monotonic
+  clockwise travel, symmetry about 12, known speeds landing on the expected
+  hours, clamping above and below the scale, NaN and infinity,
+  round-tripping, narrower and rescaled dials.
+- **Servo** — pulse endpoints, shaft angle measured from the calm end of
+  the dial, trim, gear ratios, reversed servos, narrow pulse ranges, and
+  rejecting a servo whose travel falls short of the sweep.
 - **Forecast** — real Open-Meteo payloads, gusts vs sustained wind, the
   horizon window, nulls, empty and missing arrays, truncated responses,
   API error payloads, unit conversion, and not mistaking the unit strings
@@ -93,6 +95,12 @@ it be", so it reads the hourly forecast rather than measuring. By default it
 shows the strongest hour in the next 12 — switch `kForecast.mode` to
 `NextHour` for what it's doing right now, or set `useGusts` to show gusts
 instead of sustained wind.
+
+**Why the scale starts at 9 and not at 12.** A sweep that begins at 12 and
+runs right round the face needs more rotation than a servo has, and needs
+gearing to get it. Starting at 9 and finishing at 3 keeps the whole scale
+across the top of the face, in the 180 degrees a servo turns natively, and
+puts half scale bolt upright where it is easy to read at a glance.
 
 **Why the needle mostly doesn't move.** Powering the servo is by far the
 most expensive thing in a wake cycle, so a change smaller than 1.5 km/h is

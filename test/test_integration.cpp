@@ -67,47 +67,60 @@ TEST(Integration, ShippedConfigurationIsCoherent) {
   CHECK_TRUE(dialFitsCalibration(config::kServo, config::kDial));
 }
 
-TEST(Integration, ShippedDialIsZeroAtTwelveAndHundredAtEleven) {
-  CHECK_NEAR(dialDegToClockHour(windToDialDeg(config::kDial, 0.0f)), 0.0f, kTol);
-  CHECK_NEAR(dialDegToClockHour(windToDialDeg(config::kDial, 100.0f)), 11.0f,
+TEST(Integration, ShippedDialRunsFromNineThroughTwelveToThree) {
+  CHECK_NEAR(dialDegToClockHour(windToDialDeg(config::kDial, 0.0f)), 9.0f, kTol);
+  // 12 o'clock reads back as 0 hours.
+  CHECK_NEAR(dialDegToClockHour(windToDialDeg(config::kDial, 50.0f)), 0.0f,
              kTol);
+  CHECK_NEAR(dialDegToClockHour(windToDialDeg(config::kDial, 100.0f)), 3.0f,
+             kTol);
+  CHECK_NEAR(dialSweepDeg(config::kDial), 180.0f, kTol);
 }
 
-TEST(Integration, CalmResponseParksTheNeedleAtTwelve) {
+TEST(Integration, CalmResponseParksTheNeedleAtNineOClock) {
   NeedleState needle;
   const CycleResult cycle = runCycle(needle, kCalmResponse);
   CHECK_TRUE(cycle.moved);
   CHECK_NEAR(cycle.displayedKph, 0.0f, kTol);
-  CHECK_NEAR(cycle.dialDeg, 0.0f, kTol);
-  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 0.0f, kTol);
-  // The shipped trim offsets the zero position by 7.5 shaft degrees.
-  CHECK_EQ(cycle.pulseUs, 583);
+  CHECK_NEAR(cycle.dialDeg, -90.0f, kTol);
+  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 9.0f, kTol);
+  CHECK_EQ(cycle.pulseUs, config::kServo.minPulseUs);
 }
 
-TEST(Integration, StormResponseDrivesTheNeedleToElevenOClock) {
+TEST(Integration, StormResponseDrivesTheNeedleToThreeOClock) {
   NeedleState needle;
   // Cold start: the first reading goes straight to the target, no slew cap.
   const CycleResult cycle = runCycle(needle, responseWithPeak(100.0f));
   CHECK_TRUE(cycle.moved);
   CHECK_NEAR(cycle.displayedKph, 100.0f, kTol);
-  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 11.0f, kTol);
-  CHECK_EQ(cycle.pulseUs, 2417);
+  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 3.0f, kTol);
+  CHECK_EQ(cycle.pulseUs, config::kServo.maxPulseUs);
 }
 
-TEST(Integration, WindBeyondTheScaleStillReadsElevenOClock) {
+TEST(Integration, WindBeyondTheScaleStillReadsThreeOClock) {
   NeedleState needle;
   const CycleResult cycle = runCycle(needle, responseWithPeak(180.0f));
   CHECK_TRUE(cycle.moved);
-  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 11.0f, kTol);
-  CHECK_EQ(cycle.pulseUs, 2417);
+  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 3.0f, kTol);
+  CHECK_EQ(cycle.pulseUs, config::kServo.maxPulseUs);
 }
 
-TEST(Integration, TypicalAfternoonBreezeLandsMidDial) {
+TEST(Integration, HalfScaleStandsTheNeedleStraightUp) {
+  NeedleState needle;
+  const CycleResult cycle = runCycle(needle, responseWithPeak(50.0f));
+  CHECK_TRUE(cycle.moved);
+  CHECK_NEAR(cycle.dialDeg, 0.0f, kTol);
+  CHECK_EQ(cycle.pulseUs, 1500);
+}
+
+TEST(Integration, TypicalAfternoonBreezeLandsLeftOfTwelve) {
   NeedleState needle;
   const CycleResult cycle = runCycle(needle, responseWithPeak(30.0f));
   CHECK_TRUE(cycle.moved);
-  CHECK_NEAR(cycle.dialDeg, 99.0f, kTol);         // 30% of 330 degrees
-  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 3.3f, kTol);
+  // 30% of a 180 degree sweep, starting from -90.
+  CHECK_NEAR(cycle.dialDeg, -36.0f, kTol);
+  CHECK_NEAR(dialDegToClockHour(cycle.dialDeg), 10.8f, kTol);
+  CHECK_EQ(cycle.pulseUs, 1100);
 }
 
 TEST(Integration, SecondCycleWithSameWindDoesNotMoveTheServo) {
@@ -156,22 +169,20 @@ TEST(Integration, FlatBatteryParksTheNeedleAndStopsTheServo) {
       classifyBattery(config::kPower, 3.05f, PowerMode::Normal);
   CHECK_TRUE(mode == PowerMode::Critical);
   CHECK_FALSE(servoAllowed(mode));
-  // Parked means 12 o'clock, at the bottom of the needle's travel.
-  CHECK_NEAR(windToDialDeg(config::kDial, 0.0f), 0.0f, kTol);
-  CHECK_EQ(windKphToPulseUs(config::kServo, config::kDial, 0.0f), 583);
+  // Parked means 9 o'clock, at the calm end of the needle's travel.
+  CHECK_NEAR(windToDialDeg(config::kDial, 0.0f), -90.0f, kTol);
+  CHECK_EQ(windKphToPulseUs(config::kServo, config::kDial, 0.0f),
+           config::kServo.minPulseUs);
 }
 
-TEST(Integration, TrimCentresTheSweepInTheServoTravel) {
-  // 165 shaft degrees of sweep inside 180 degrees of travel, with the
-  // spare 15 split evenly so there is assembly slack at both end stops.
-  const float atZero = dialDegToShaftDeg(config::kServo,
-                                         windToDialDeg(config::kDial, 0.0f));
-  const float atFull = dialDegToShaftDeg(config::kServo,
-                                         windToDialDeg(config::kDial, 100.0f));
-  CHECK_NEAR(atZero, 7.5f, kTol);
-  CHECK_NEAR(atFull, 172.5f, kTol);
-  CHECK_NEAR(atFull - atZero, 165.0f, kTol);
-  CHECK_NEAR(config::kServo.travelDeg - atFull, atZero, kTol);
+TEST(Integration, DialSweepUsesTheServoTravelExactly) {
+  const float atZero = dialDegToShaftDeg(
+      config::kServo, config::kDial, windToDialDeg(config::kDial, 0.0f));
+  const float atFull = dialDegToShaftDeg(
+      config::kServo, config::kDial, windToDialDeg(config::kDial, 100.0f));
+  CHECK_NEAR(atZero, 0.0f, kTol);
+  CHECK_NEAR(atFull, config::kServo.travelDeg, kTol);
+  CHECK_NEAR(atFull - atZero, 180.0f, kTol);
 }
 
 TEST(Integration, EveryWindSpeedOnTheScaleGivesAReachablePulse) {
@@ -184,10 +195,10 @@ TEST(Integration, EveryWindSpeedOnTheScaleGivesAReachablePulse) {
 }
 
 TEST(Integration, DialResolutionIsFineEnoughToRead) {
-  // 1 km/h should be a visible step on the face: 3.3 degrees of needle.
+  // 1 km/h is 1.8 degrees of needle across a 180 degree sweep.
   const float oneKph = windToDialDeg(config::kDial, 1.0f) -
                        windToDialDeg(config::kDial, 0.0f);
-  CHECK_NEAR(oneKph, 3.3f, kTol);
+  CHECK_NEAR(oneKph, 1.8f, kTol);
 
   // And a distinct pulse width, so the servo can actually resolve it.
   CHECK_TRUE(windKphToPulseUs(config::kServo, config::kDial, 1.0f) >
