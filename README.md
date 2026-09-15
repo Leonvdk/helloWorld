@@ -88,9 +88,14 @@ pio device monitor
 Set your location in `src/config.h` (`kLatitude` / `kLongitude`); it ships
 pointing at Aljezur, Portugal.
 
-`pio run -e bench -t upload` instead flashes a mode that sweeps the needle
-across the whole scale on a loop, with no WiFi and no sleep — use it to fit
-the needle before wiring anything else.
+Two other build targets:
+
+- `pio run -e usb -t upload` — **mains-powered build.** No battery, no sense
+  divider, no MOSFETs, and a 5-minute update interval. About a third of the
+  parts, and the servo gets a proper 5 V.
+- `pio run -e bench -t upload` — sweeps the needle across the whole scale on
+  a loop, with no WiFi and no sleep. Use it to fit the needle before wiring
+  anything else.
 
 **[docs/SETUP.md](docs/SETUP.md) is the step-by-step build guide**: parts,
 toolchain, bench test, pin assignments, the servo power switch and the

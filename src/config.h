@@ -48,7 +48,13 @@ constexpr float kBatteryDividerRatio = 2.0f;
 // Set false on a first build that has no battery divider fitted yet. An
 // unconnected ADC pin floats and reads as a flat cell, which would put the
 // clock straight into critical mode and stop it ever driving the servo.
+// WINDCLOCK_USB_POWERED (pio run -e usb) builds the mains-powered clock:
+// no battery, so no divider to read and nothing to conserve.
+#ifdef WINDCLOCK_USB_POWERED
+constexpr bool kBatterySenseFitted = false;
+#else
 constexpr bool kBatterySenseFitted = true;
+#endif
 // Assumed battery voltage when the divider is not fitted.
 constexpr float kAssumedBatteryVolts = 4.0f;
 
@@ -101,8 +107,19 @@ constexpr NeedlePolicy kNeedle = {
 };
 
 // ------------------------------------------------------------------- power
+// On batteries the update interval is the main lever on how long a charge
+// lasts. On mains it costs nothing, so the clock checks far more often.
+constexpr uint32_t kBatterySleepSeconds = 30 * 60;
+constexpr uint32_t kMainsSleepSeconds = 5 * 60;
+
+#ifdef WINDCLOCK_USB_POWERED
+constexpr uint32_t kNormalSleepSeconds = kMainsSleepSeconds;
+#else
+constexpr uint32_t kNormalSleepSeconds = kBatterySleepSeconds;
+#endif
+
 constexpr PowerPolicy kPower = {
-    /*normalSleepSeconds=*/30 * 60,
+    /*normalSleepSeconds=*/kNormalSleepSeconds,
     /*lowBatterySleepSeconds=*/3 * 60 * 60,
     /*criticalSleepSeconds=*/12 * 60 * 60,
     /*lowBatteryVolts=*/3.50f,

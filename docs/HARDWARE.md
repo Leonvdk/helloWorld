@@ -215,6 +215,15 @@ unless you can reach the port.
 Either way the cell sits at 4.2 V full and 3.0 V empty, which is exactly
 what the shipped `kPower` thresholds expect. No changes needed.
 
+### Or no battery at all
+
+If the clock hangs near an outlet, a USB-C charger removes the divider,
+both MOSFETs and every threshold in this section — build it with
+`pio run -e usb`, which skips the battery read and polls every 5 minutes
+instead of 30. The servo then runs off the board's 5 V pin, which is the
+voltage it actually wants, so the boost module below is unnecessary too.
+See "Mains-powered build" in [SETUP.md](SETUP.md).
+
 ### Not a USB power bank
 
 This is the one to avoid. Power banks watch their output current and shut

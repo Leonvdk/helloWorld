@@ -113,6 +113,10 @@ changing anything mechanical — most of it is one line in `src/config.h`.
 
 ## 5. Wire it for real
 
+**Running it from a USB-C charger?** Then you are very nearly done — the
+bench wiring *is* the finished wiring. Skip to
+[5a. Mains-powered build](#5a-mains-powered-build) below.
+
 Power down and disconnect USB first.
 
 ### Pin assignments
@@ -175,6 +179,59 @@ permanent 21 µA drain. The 100 nF steadies the ADC.
 
 ---
 
+## 5a. Mains-powered build
+
+If the clock hangs near an outlet, drop the battery entirely. This removes
+the divider, both MOSFETs, the thresholds and every resistor — about
+two-thirds of the parts list.
+
+**Wiring** is what you already have from the bench test:
+
+| Servo wire | Goes to |
+|---|---|
+| Signal | **GPIO 18** |
+| V+ | **5V** / **VUSB** pin |
+| GND | **GND** |
+
+Then a USB-C charger into the board's USB port. Use one rated **1 A or
+more** — the servo and the WiFi transmit burst overlap badly on a 500 mA
+supply.
+
+This build actually treats the servo *better* than the battery one: it gets
+a proper 5 V instead of a LiPo's 3.0–4.2 V, so it is faster and stronger,
+and no boost module is needed.
+
+**Build it with:**
+
+```sh
+pio run -e usb -t upload
+```
+
+That flag does three things: skips the battery read (so an unwired sense
+pin cannot be mistaken for a flat cell), and drops the update interval from
+30 minutes to **5**, since nothing is being conserved. The clock still deep
+sleeps between updates — same code path, just a shorter nap.
+
+**The servo power switch is optional here.** Without the MOSFET the servo
+stays powered, but the firmware detaches the signal after each move, so the
+servo goes limp and draws almost nothing. Fit the switch anyway if a faint
+servo hum would bother you where the clock hangs.
+
+Skip step 5's wiring entirely and carry on from step 6. Everything in the
+troubleshooting table about batteries stops applying.
+
+### If the board won't power up from the charger
+
+Plug it in and nothing happens, but it works fine from a computer? The
+board is almost certainly missing the 5.1 kΩ CC pull-down resistors that a
+USB-C source looks for before it will deliver power. Plenty of cheap boards
+with USB-C sockets omit them.
+
+The fix is a **USB-A to USB-C cable** into an A-port charger, which has no
+such negotiation. Nothing is wrong with the board otherwise.
+
+---
+
 ## 6. Configure
 
 Edit `src/config.h`:
@@ -227,7 +284,7 @@ that filename.
 ## 7. Flash the real firmware
 
 ```sh
-pio run -e esp32dev -t upload
+pio run -e esp32dev -t upload   # or -e usb for the mains build
 pio device monitor
 ```
 
@@ -241,10 +298,13 @@ A healthy first boot looks like this:
 [wind] sleeping 1800 s
 ```
 
-`mode 0` is Normal, `1` is low battery, `2` is critical.
+`mode 0` is Normal, `1` is low battery, `2` is critical. On the `usb` build
+the battery line always reads 4.00 V and mode 0 — it is not measuring
+anything, by design.
 
 After that the board is in deep sleep and the serial port goes quiet for 30
-minutes. **Press reset** to trigger another cycle rather than waiting.
+minutes, or 5 on the `usb` build. **Press reset** to trigger another cycle
+rather than waiting.
 
 On the second cycle you'll usually see:
 
@@ -286,6 +346,7 @@ Leave it running and come back. Things worth confirming:
 | `HTTP -1` or `HTTP -11` | DNS or TLS handshake failed | Usually a weak signal or a captive portal; check the board is actually on the network |
 | `forecast unusable` | Open-Meteo returned something unexpected | Check your coordinates are in range and in the right order |
 | Upload fails with "failed to connect" | Board not in bootloader | Hold **BOOT** during *Connecting...*; check the cable carries data |
+| Dead from a USB-C charger, fine from a computer | Board lacks the CC pull-down resistors | Use a USB-A to USB-C cable — see step 5a |
 | Serial port shows nothing after the first cycle | It's in deep sleep, working correctly | Press reset |
 | Servo twitches on every boot | Missing 100 kΩ pulldown on the N-FET gate | Add it |
 

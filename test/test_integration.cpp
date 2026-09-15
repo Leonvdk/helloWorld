@@ -204,3 +204,25 @@ TEST(Integration, DialResolutionIsFineEnoughToRead) {
   CHECK_TRUE(windKphToPulseUs(config::kServo, config::kDial, 1.0f) >
              windKphToPulseUs(config::kServo, config::kDial, 0.0f));
 }
+
+TEST(Integration, MainsPoweredPresetIsCoherent) {
+  // The usb build swaps the update interval for a much shorter one. The
+  // ordering rules in powerPolicyIsValid still have to hold, or the
+  // firmware would silently fall back to the previous power mode.
+  PowerPolicy mains = config::kPower;
+  mains.normalSleepSeconds = config::kMainsSleepSeconds;
+  CHECK_TRUE(powerPolicyIsValid(mains));
+  CHECK_EQ(sleepSecondsFor(mains, PowerMode::Normal), 5u * 60u);
+
+  PowerPolicy battery = config::kPower;
+  battery.normalSleepSeconds = config::kBatterySleepSeconds;
+  CHECK_TRUE(powerPolicyIsValid(battery));
+  CHECK_EQ(sleepSecondsFor(battery, PowerMode::Normal), 30u * 60u);
+}
+
+TEST(Integration, MainsPollingStaysWellInsideTheStalenessWindow) {
+  // A five-minute interval must not be so long that a couple of failed
+  // fetches park the needle. It takes many misses to go stale.
+  CHECK_TRUE(config::kMainsSleepSeconds * 12 <
+             config::kPower.staleAfterSeconds);
+}
