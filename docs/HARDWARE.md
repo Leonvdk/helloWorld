@@ -39,7 +39,8 @@ rather than flipping the dial angles around.
   for battery use (FireBeetle, TinyPICO, LOLIN32 Lite) sleeps at tens of
   microamps instead of milliamps.
 - Servo — see the table above.
-- 1S LiPo, 2000 mAh or more, or 3x AA with a boost converter.
+- A battery — see "Powering it" below. 1S LiPo or 3x AA NiMH, either
+  straight onto the board's battery input.
 - P-channel MOSFET or a load switch for the servo rail (e.g. AO3401 plus a
   small N-channel to drive the gate from 3.3 V logic).
 - Two resistors for the battery divider (100k/100k) and an N-channel MOSFET
@@ -63,6 +64,67 @@ a stalled servo pulls an amp or more and will brown out the board mid-WiFi.
 Put a 470 uF capacitor across the servo's supply, close to the servo.
 
 Grounds must be common between the battery, the ESP32 and the servo.
+
+## Powering it
+
+The ESP32 wants **3.0 to 3.6 V**. Anything that keeps the rail in that band
+without a converter is a good battery here, because a converter's idle
+current is the thing that decides how long the clock runs.
+
+| Pack | Fresh | Flat | Verdict |
+|---|---|---|---|
+| **1S LiPo / 18650** | 4.2 V | 3.0 V | The default. Connects straight to a battery-input board, handles the WiFi current pulses, and the shipped thresholds are already set for it. |
+| **3x AA NiMH** | ~4.0 V | ~3.0 V | The good AA answer. 3.6 V nominal sits right in the ESP32's band, so it needs **no converter at all** — same wiring as a LiPo, just different thresholds. Rechargeable, and low internal resistance handles the current pulses. |
+| **4x AA NiMH** | ~5.3 V | ~4.0 V | Best servo performance, since the servo gets its rated 4.8 V. Needs a low-quiescent 3.3 V regulator for the ESP32; the servo runs straight off the pack. |
+| 2x AA alkaline | 3.1 V | 2.0 V | **Avoid.** See below. |
+| 2x AA lithium primary | 3.6 V | 2.0 V | Workable with a low-Iq boost. Much lower internal resistance than alkaline and a flatter discharge, but the boost's idle current still applies. |
+| 3x AA alkaline | 4.5 V | 3.0 V | Works via a low-quiescent LDO or buck. Alkaline sags under the WiFi pulses as it depletes, so NiMH is the better cell. |
+
+### Why not 2x AA
+
+Two cells give 3.1 V fresh and 2.0 V flat, so most of the pack's energy sits
+*below* the ESP32's 3.0 V minimum. Getting at it needs a boost converter,
+and that is where the idea comes apart:
+
+- **Boost idle current.** This clock sleeps at roughly 20 µA. A common boost
+  module (MT3608, XL6009 and friends) idles at 1–2 mA — fifty to a hundred
+  times the entire rest of the design. Months of battery life becomes about
+  a week. You would need a low-Iq part in power-save mode — TPS61200,
+  TPS61098 class, under 10 µA — not a generic module.
+- **Current pulses.** WiFi transmit pulls ~300 mA. Through a boost from a
+  half-depleted 2.2 V pack, that is 500 mA-plus out of the cells. Alkaline
+  AAs have high internal resistance and sag under it; the ESP32's brownout
+  detector trips around 2.8 V and you get reboot loops that look like
+  firmware bugs.
+- **The servo.** An SG90 is specified for 4.8–6 V. On a 3.3 V boosted rail
+  it is slow and weak. A light needle will probably still move, but it is
+  outside spec.
+
+Energy-wise two AA cells are actually in the same ballpark as a 2000 mAh
+LiPo. The problem is entirely delivery, not capacity.
+
+### Battery thresholds
+
+`kPower` in `src/config.h` ships with 1S LiPo numbers. Change them to match
+your pack, or the clock will either never warn or refuse to run:
+
+```cpp
+// 1S LiPo / 18650 (shipped)
+/*lowBatteryVolts=*/3.50f, /*criticalBatteryVolts=*/3.20f, /*recoverVolts=*/3.65f,
+
+// 3x AA NiMH
+/*lowBatteryVolts=*/3.30f, /*criticalBatteryVolts=*/3.10f, /*recoverVolts=*/3.45f,
+```
+
+Two rules whatever you use:
+
+- **Measure the raw pack, not a regulated rail.** After a converter the
+  sense pin reads a steady 3.3 V right up until the moment it collapses,
+  which tells you nothing. Wire the divider across the cells.
+- **Keep the divider output under ~2.4 V at full charge.** With the shipped
+  100k/100k pair and `kBatteryDividerRatio = 2.0`, that covers packs up to
+  4.8 V. A 4x AA pack at 5.3 V needs a different ratio — 100k/47k gives
+  3.13, so set `kBatteryDividerRatio = 3.13f`.
 
 ## Power budget
 

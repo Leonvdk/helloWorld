@@ -16,7 +16,7 @@ Read [HARDWARE.md](HARDWARE.md) first if you haven't picked a servo yet.
 |---|---|
 | ESP32 dev board | Any ESP32 with a USB port. For battery life pick a low-sleep-current board — FireBeetle ESP32, TinyPICO, LOLIN32 Lite. A plain DevKitC works for the bench test but will flatten a battery in days. |
 | Servo | Standard 180°, e.g. SG90 or MG90S. A 270° servo is more forgiving — see HARDWARE.md. |
-| 1S LiPo, 2000 mAh+ | Ideally with a JST-PH connector matching your board's battery input. |
+| Battery | 1S LiPo 2000 mAh+, ideally with a JST-PH connector matching your board's battery input. **3× AA NiMH works just as well and needs no converter** — see "Powering it" in HARDWARE.md before you buy, and note 2× AA is a poor fit. |
 | P-channel MOSFET | AO3401 or similar, for the servo power switch. |
 | N-channel MOSFETs ×2 | 2N7002 or BSS138, to drive the P-FET gate and to gate the divider. |
 | Resistors | 2× 100 kΩ (divider), 2× 100 kΩ (gate pulls), 1× 1 kΩ. |
@@ -275,6 +275,8 @@ Leave it running and come back. Things worth confirming:
 | Symptom | Cause | Fix |
 |---|---|---|
 | `battery 0.00 V, mode 2` and the needle never moves | Divider not fitted or not wired | Set `kBatterySenseFitted = false` in `config.h` until you wire it |
+| `mode 1` or `mode 2` on a freshly charged pack | Thresholds still set for a LiPo | Match `kPower` to your battery — see "Battery thresholds" in HARDWARE.md |
+| Reboot loops once the battery is half used | Pack sagging under the WiFi current pulse | Alkaline cells or an undersized converter; see "Powering it" in HARDWARE.md |
 | `FATAL: servo travel cannot cover the dial` | `travelDeg` smaller than the 180° sweep, or `trimDeg` pushes it past the end | See "About that missing trim margin" in HARDWARE.md |
 | Needle runs backwards — 100 km/h at 9 o'clock | Servo turns the other way | `kServo.reversed = true` |
 | Needle won't quite reach 9 or 3 | Servo doesn't make a true 180° | Widen `minPulseUs`/`maxPulseUs` to 400/2600, or lower `travelDeg` to what it really turns |
